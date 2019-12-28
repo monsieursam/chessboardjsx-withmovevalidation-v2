@@ -1,0 +1,23 @@
+{
+  "name": "chessboardjsx-withmovevalidation-v2",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "chess.js": "^0.10.2",
+    "chessboardjsx": "2.2.0",
+    "firebase": "^7.3.0",
+    "react": "^16.4.0",
+    "react-dom": "^16.4.0",
+    "react-router-dom": "^5.1.2",
+    "react-scripts": "1.1.4",
+    "roughjs": "2.1.3"
+  },
+  "scripts": {
+    "start": "react-scripts start",
+    "build": "react-scripts build",
+    "test": "react-scripts test --env=jsdom",
+    "eject": "react-scripts eject"
+  },
+  "keywords": [],
+  "description": "Demo showing how to integrate move validation,  'click to move', drop square styling, right click styling and more"
+}
