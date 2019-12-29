@@ -117,22 +117,28 @@ class HumanVsHuman extends Component {
       pieceSquare: square
     }));
 
+    const from = this.state.pieceSquare
+    const to = square
+
     let move = this.game.move({
-      from: this.state.pieceSquare,
-      to: square,
+      from,
+      to,
       promotion: "q" // always promote to a queen for example simplicity
     });
 
     // illegal move
     if (move === null) return;
 
-    const fen = this.state.fen
+    const fenBefore = this.state.fen
+    const fen = this.game.fen()
     this.setState({
-      fenBefore: fen,
-      fen: this.game.fen(),
+      fenBefore,
+      fen,
       history: this.game.history({ verbose: true }),
       pieceSquare: ""
     });
+
+    this.savePosition(fenBefore, fen, from, to)
   };
 
   onSquareRightClick = square =>
@@ -140,13 +146,13 @@ class HumanVsHuman extends Component {
       squareStyles: { [square]: { backgroundColor: "deepPink" } }
     });
 
-  savePosition = (nextPosition, position) => {
+  savePosition = (fenBeforeAt, fenAt, from, to) => {
     const find = '/';
     const re = new RegExp(find, 'g');
-    const fen = this.state.fen
-    const fenBefore = this.state.fenBefore.replace(re, '-')
+    const fenBefore = fenBeforeAt.replace(re, '-')
+    const fen = fenAt.replace(re, '-')
     const db = firebase.database().ref(`/played_move/${fenBefore}`);
-    const ref = db.orderByChild('positionNext').equalTo(this.state.fen);
+    const ref = db.orderByChild('positionNext').equalTo(fen);
     ref.once("value", function(snapshot) {
       if (snapshot && snapshot.val()){
         console.log("true");
@@ -157,25 +163,26 @@ class HumanVsHuman extends Component {
 
           // childData will be the actual contents of the child
           const childData = childSnapshot.val();
-
-          snapshot.child(key).ref.update({value: childData.value + 1})
-
-          console.log(childData)
+          
+          console.log(childData.from)
+          if(childData.from === from && childData.to === to) {
+            snapshot.child(key).ref.update({value: childData.value + 1})
+          } else {
+            console.log("false");
+            const fenReplace = fen.replace(re, '-')
+            db.push().set({positionNext: fenReplace, value: 0, from, to})
+          }
       });
           
-        }
-        else {
-          console.log("false");
-          db.push().set({positionNext: fen, value: 0})
-        }
+    } else {
+      console.log("false");
+      const fenReplace = fen.replace(re, '-')
+      db.push().set({positionNext: fenReplace, value: 0, from, to})
+    }
     }, function (errorObject) {
       console.log("The read failed: " + errorObject.code);
     });
 
-
-  }
-
-  saveAll() {
 
   }
 
@@ -227,7 +234,6 @@ export default class WithMoveValidation extends Component {
               borderRadius: "5px",
               boxShadow: `0 5px 15px rgba(0, 0, 0, 0.5)`
             }}
-            getPosition={nextPosition => savePosition(nextPosition, position)}
             squareStyles={squareStyles}
             dropSquareStyle={dropSquareStyle}
             onDragOverSquare={onDragOverSquare}

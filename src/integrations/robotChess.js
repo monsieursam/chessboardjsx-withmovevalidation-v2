@@ -36,8 +36,9 @@ class RandomVsRandom extends Component {
 
   componentDidUpdate(prevProps) {
     if (this.state.diff !== this.state.fenBefore) {
+      // this.makeMove()
       this.setState({ diff: this.state.fenBefore})
-      this.makeMove()
+      // this.makeMove()
     }
   }
 
@@ -129,24 +130,28 @@ class RandomVsRandom extends Component {
       pieceSquare: square
     }));
 
+    const from = this.state.pieceSquare
+    const to = square
+
     let move = this.game.move({
-      from: this.state.pieceSquare,
-      to: square,
+      from,
+      to,
       promotion: "q" // always promote to a queen for example simplicity
     });
 
     // illegal move
     if (move === null) return;
 
-    const fen = this.state.fen
+    const fenBefore = this.state.fen
+    const fen = this.game.fen()
     this.setState({
-      fenBefore: fen,
-      fen: this.game.fen(),
+      fenBefore,
+      fen,
       history: this.game.history({ verbose: true }),
       pieceSquare: ""
     });
 
-    this.savePosition(this.game.fen(), fen)
+    this.savePosition(fenBefore, fen, from, to)
   };
 
   onSquareRightClick = square =>
@@ -154,47 +159,45 @@ class RandomVsRandom extends Component {
       squareStyles: { [square]: { backgroundColor: "deepPink" } }
     });
 
-  savePosition = (nextPosition, position) => {
+  savePosition = (fenBeforeAt, fenAt, from, to) => {
     console.log('I save position')
 
     const find = '/';
     const re = new RegExp(find, 'g');
-    const fen = nextPosition
-    const fenBefore = position.replace(re, '-')
+    const fen = fenAt.replace(re, '-')
+    const fenBefore = fenBeforeAt.replace(re, '-')
     const db = firebase.database().ref(`/played_move/${fenBefore}`);
     const ref = db.orderByChild('positionNext').equalTo(fen);
     ref.once("value", function(snapshot) {
       if (snapshot && snapshot.val()){
         console.log("true");
           snapshot.forEach(function(childSnapshot) {
-          // key will be "ada" the first time and "alan" the second time
           const key = childSnapshot.key;
-
-
-          // childData will be the actual contents of the child
           const childData = childSnapshot.val();
-
-          snapshot.child(key).ref.update({value: childData.value + 1})
-
-          console.log(childData)
+          
+          if(childData.from === from && childData.to === to) {
+            snapshot.child(key).ref.update({value: childData.value + 1})
+          } else {
+            console.log("false");
+            db.push().set({positionNext: fen, value: 0, from, to})
+          }
       });
           
-        }
-        else {
-          console.log("false");
-          db.push().set({positionNext: fen, value: 0})
-        }
+    } else {
+      db.push().set({positionNext: fen, value: 0, from, to})
+    }
     }, function (errorObject) {
       console.log("The read failed: " + errorObject.code);
     });
 
+    this.makeMove()
   }
 
   makeMove = () => {
     console.log('A move was done')
     const find = '/';
     const re = new RegExp(find, 'g');
-    const fen = this.state.fen.replace(re, '-')
+    const fen = this.game.fen().replace(re, '-')
     const db = firebase.database().ref(`/played_move/${fen}`);
     const ref = db.orderByChild('value').limitToLast(1);
     let childData;
@@ -214,10 +217,29 @@ class RandomVsRandom extends Component {
       console.log("The read failed: " + errorObject.code);
     }).then(() => {
       if(childData) {
-        console.log(fen)
         console.log(childData)
-        this.setState({fen: childData && childData.positionNext, fenBefore: fen})
+        const {from} = childData
+        const {to} = childData
+
+        console.log(from)
+        console.log(to)
+        let move = this.game.move({from, to});
+        
+        if (move === null) return;
+
+        console.log('plop')
+        const fen = this.state.fen
+        this.setState({
+          fenBefore: fen,
+          fen: this.game.fen(),
+          history: this.game.history({ verbose: true }),
+          pieceSquare: ""
+        });
+
+        // this.setState({fen: childData && childData.positionNext, fenBefore: fen})
+        
       } else {
+        console.log("Not found a good move")
         this.makeRandomMove()
       }
       
@@ -236,6 +258,8 @@ class RandomVsRandom extends Component {
       return;
 
     let randomIndex = Math.floor(Math.random() * possibleMoves.length);
+
+    console.log(possibleMoves[randomIndex])
     this.game.move(possibleMoves[randomIndex]);
     this.setState({ fen: this.game.fen() });
 
