@@ -32,6 +32,10 @@ class RandomVsRandom extends Component {
     
     this.PLAYER_ID = 'robot'
     this.PLAYER_ID2 = 'robot2'
+    
+  }
+
+  componentDidMount() {
     this.WHO_BEGIN = Math.floor(Math.random() * 2) + 1
 
     const db = firebase.database().ref(`/games/`);
@@ -50,14 +54,11 @@ class RandomVsRandom extends Component {
 
     this.UNIQUE_ID = ref.key
 
-    
-  }
-
-  componentDidMount() {
     this.game = new Chess();
 
     // this.makeRandomMove()
-    
+    this.makeMove()
+
     var myInterval = setInterval(
       () => {
         let possibleMoves = this.game.moves();
@@ -104,7 +105,6 @@ class RandomVsRandom extends Component {
           if (snapshot && snapshot.val()){
             console.log("true");
             snapshot.forEach(childSnapshot => {
-              const key = childSnapshot.key;
               const childData = childSnapshot.val();
               const db = firebase.database().ref(`/played_move/${childData.fen}`); 
               db.once("value", function(snapshot2) {
@@ -141,7 +141,6 @@ class RandomVsRandom extends Component {
           if (snapshot && snapshot.val()){
             console.log("true");
             snapshot.forEach(childSnapshot => {
-              const key = childSnapshot.key;
               const childData = childSnapshot.val();
               const db = firebase.database().ref(`/played_move/${childData.fen}`); 
               db.once("value", function(snapshot2) {
@@ -306,12 +305,11 @@ class RandomVsRandom extends Component {
       const ref = db.orderByChild('positionNext').equalTo(fen);
       ref.once("value", function(snapshot) {
         if (snapshot && snapshot.val()){
-          console.log("true");
+          console.log("Situation déja existente");
             snapshot.forEach(function(childSnapshot) {
             const key = childSnapshot.key;
             const childData = childSnapshot.val();
             
-            console.log(childData)
             if(childData.from === from && childData.to === to && childData.positionNext === fen) {
               alreadyExist = true
               console.log("Le coup a déja été fait")
@@ -323,7 +321,7 @@ class RandomVsRandom extends Component {
             
       } 
       if(!alreadyExist) {
-        console.log("Personne n'a jamais fait ce coup");
+        console.log("Personne n'a jamais fait ce coup dans cette situation");
         const refpush = db.push()
         refpush.set({positionNext: fen, value: 0, from, to})
   
@@ -345,40 +343,31 @@ class RandomVsRandom extends Component {
     const re = new RegExp(find, 'g');
     const fen = isPlayedAfter ? this.game.fen().replace(re, '-') : 'start'
     const db = firebase.database().ref(`/played_move/${fen}`);
-    const ref = db.orderByChild('win').limitToFirst(1);
+    const ref = db.orderByChild('win').limitToLast(1);
     let childData;
     ref.once("value", function(snapshot) {
       if (snapshot && snapshot.val()){
-        console.log("true");
-          snapshot.forEach(function(childSnapshot) {
-          // key will be "ada" the first time and "alan" the second time
-          const key = childSnapshot.key;
-
-
-          // childData will be the actual contents of the child
-          childData = childSnapshot.val();
-          if(!childData.win && childData.lose && !childData.draw) {
-            childData = null
-          } else if(!childData.win && childData.draw && !childData.lose) {
-            childData = null
-          }
-      });
+        console.log("Situation déja existente");
+          snapshot.forEach(childSnapshot => {
+            childData = childSnapshot.val();
+            if(!childData.win && childData.lose && !childData.draw) {
+              childData = null
+            } else if(!childData.win && childData.draw && !childData.lose) {
+              childData = null
+            }
+          });
         }
     }, function (errorObject) {
       console.log("The read failed: " + errorObject.code);
     }).then(() => {
       if(childData) {
-        console.log(childData)
+        console.log("ce coup va m'avancer vers la victoire")
         const { from } = childData
         const { to } = childData
-
-        console.log(from)
-        console.log(to)
         let move = from ? this.game.move({from, to}) : this.game.move(to) 
         
         if (move === null) return;
 
-        console.log('plop')
         const fenBefore = this.state.fen
         const fen = this.game.fen()
         this.setState({
@@ -414,7 +403,6 @@ class RandomVsRandom extends Component {
 
     let randomIndex = Math.floor(Math.random() * possibleMoves.length);
 
-    console.log(possibleMoves)
     this.game.move(possibleMoves[randomIndex]);
 
     const fen = this.game.fen()

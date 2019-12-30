@@ -4,6 +4,8 @@ import { Route } from 'react-router-dom'
 
 import WithMoveValidation from "./integrations/WithMoveValidation";
 import RobotChess from "./integrations/robotChess";
+import FightAgainstRobot from "./integrations/fightAgainstRobot";
+
 import HomePage from './HomePage'
 
 var firebaseConfig = {
@@ -26,6 +28,7 @@ class Demo extends Component {
           <Route exact path='/' render={() => <HomePage />} />
           <Route exact path='/robot' render={() => <RobotChess />} />
           <Route exact path='/solo' render={() => <WithMoveValidation />} />
+          <Route exact path='/robotvsme' render={() => <FightAgainstRobot />} />
         </div>
       </div>
     );

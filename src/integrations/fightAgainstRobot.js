@@ -1,15 +1,17 @@
 import React, { Component } from "react";
 import PropTypes from "prop-types";
 import firebase from 'firebase'
-import Chess from "chess.js"; // import Chess from  "chess.js"(default) if recieving an error about new Chess() not being a constructor
+import Chess from "chess.js"; // import Chess from  "chess.js"(default) if recieving an error about new Chess not being a constructor
 
 import Chessboard from "chessboardjsx";
 
-class HumanVsHuman extends Component {
+class RandomVsRandom extends Component {
   static propTypes = { children: PropTypes.func };
 
   state = {
     fenBefore: "",
+    diff: "",
+    diff2: "",
     fenNext: "",
     fen: "start",
     // square styles for active drop square
@@ -29,13 +31,24 @@ class HumanVsHuman extends Component {
     
     
     this.PLAYER_ID = 1
-    this.PLAYER_ID2 = 2
+    this.PLAYER_ID2 = 'robot'
     this.WHO_BEGIN = Math.floor(Math.random() * 2) + 1
 
     const db = firebase.database().ref(`/games/`);
     const ref = db.push()
 
-    ref.set({white: this.PLAYER_ID, black: this.PLAYER_ID2})
+    if(this.WHO_BEGIN === 1) {
+      this.BLACK = this.PLAYER_ID
+      this.WHITE = this.PLAYER_ID2
+      
+      ref.set({white: this.PLAYER_ID2, black: this.PLAYER_ID})
+
+      this.makeMove()
+    } else {
+      this.WHITE = this.PLAYER_ID
+      this.BLACK = this.PLAYER_ID2
+      ref.set({black: this.PLAYER_ID2, white: this.PLAYER_ID})
+    }
 
     this.UNIQUE_ID = ref.key
 
@@ -46,16 +59,53 @@ class HumanVsHuman extends Component {
     this.game = new Chess();
 
     // this.makeRandomMove()
-    setTimeout(
-      () => {
-        this.drawGame()
+    
+  }
+
+  winGame = () => {
+    if(this.game.in_checkmate()) {
+    console.log("roooooh echec et math bg")
+    
+    let colorWinnerId
+        if(this.game.turn() === 'b') {
+          colorWinnerId = this.WHITE
+        } else {
+          colorWinnerId = this.BLACK
+        }
+
+        const dba = firebase.database().ref(`/games/${this.UNIQUE_ID}/played_move/`);
+
+        dba.once("value", function(snapshot) {
+          if (snapshot && snapshot.val()){
+            console.log("true");
+            snapshot.forEach(childSnapshot => {
+              const childData = childSnapshot.val();
+              const db = firebase.database().ref(`/played_move/${childData.fen}`); 
+              db.once("value", function(snapshot2) {
+                if (snapshot2 && snapshot2.val()){
+                  snapshot2.forEach(childSnapshot2 => {
+                    const childData2 = childSnapshot2.val();
+                    const dbupdate = firebase.database().ref(`/played_move/${childData.fen}/${childData.idMove}/`);
+                    if(childData.player === colorWinnerId) {
+                      dbupdate.update({win: childData2.win ? childData2.win + 1 : 1 })
+                    } else {
+                      dbupdate.update({lose: childData2.lose ? childData2.lose + 1 : 1 })
+                    }
+                })
+              }
+              }, function (errorObject) {
+                  console.log("The read failed: " + errorObject.code);
+              });
+            
+          });
+        }
         setTimeout(
           () => window.location.reload(), 1000
         )
-      },
-      1000000
-    )
-    
+        }, function (errorObject) {
+          console.log("The read failed: " + errorObject.code);
+        });
+      }
   }
 
   drawGame = () => {
@@ -93,60 +143,10 @@ class HumanVsHuman extends Component {
     if (this.state.diff !== this.state.fenBefore) {
       // this.makeMove()
       this.setState({ diff: this.state.fenBefore})
-      let possibleMoves = this.game.moves();
-      if (
-        this.game.game_over() === true ||
-        this.game.in_draw() === true ||
-        possibleMoves.length === 0
-      ) {
-        let colorWinnerId
-        if(this.game.turn() === 'b') {
-          colorWinnerId = this.PLAYER_ID
-        } else {
-          colorWinnerId = this.PLAYER_ID2
-        }
-
-        const dba = firebase.database().ref(`/games/${this.UNIQUE_ID}/played_move/`);
-
-        dba.once("value", function(snapshot) {
-          if (snapshot && snapshot.val()){
-            console.log("true");
-            snapshot.forEach(childSnapshot => {
-              const childData = childSnapshot.val();
-              const db = firebase.database().ref(`/played_move/${childData.fen}`); 
-              db.once("value", function(snapshot2) {
-                if (snapshot2 && snapshot2.val()){
-                  snapshot2.forEach(childSnapshot2 => {
-                    const childData2 = childSnapshot2.val();
-                    const dbupdate = firebase.database().ref(`/played_move/${childData.fen}/${childData.idMove}/`);
-                    alert(colorWinnerId)
-                    alert()
-                    if(childData.player === colorWinnerId) {
-                      dbupdate.update({win: childData2.win ? childData2.win + 1 : 1 })
-                    } else {
-                      dbupdate.update({lose: childData2.lose ? childData2.lose + 1 : 1 })
-                    }
-                })
-              }
-              }, function (errorObject) {
-                  console.log("The read failed: " + errorObject.code);
-              });
-            
-          });
-        }
-        setTimeout(
-          () => window.location.reload(), 1000
-        )
-        }, function (errorObject) {
-          console.log("The read failed: " + errorObject.code);
-        });
-        
-      } 
-      
+      this.winGame()
     }
   }
 
-  // keep clicked square style and remove hint squares
   removeHighlightSquare = () => {
     this.setState(({ pieceSquare, history }) => ({
       squareStyles: squareStyling({ pieceSquare, history })
@@ -249,6 +249,7 @@ class HumanVsHuman extends Component {
 
     const fenBefore = this.state.fen
     const fen = this.game.fen()
+
     this.setState({
       fenBefore,
       fen,
@@ -257,6 +258,8 @@ class HumanVsHuman extends Component {
     });
 
     this.savePosition(fenBefore, fen, from, to, this.PLAYER_ID)
+
+    this.makeMove(true)
   };
 
   onSquareRightClick = square =>
@@ -264,15 +267,9 @@ class HumanVsHuman extends Component {
       squareStyles: { [square]: { backgroundColor: "deepPink" } }
     });
 
-    savePosition = (fenBeforeAt, fenAt, from, to) => {
+    savePosition = (fenBeforeAt, fenAt, from, to, player) => {
       console.log('I save position')
-      let colorWinnerId
-        if(this.game.turn() === 'b') {
-          colorWinnerId = this.PLAYER_ID
-        } else {
-          colorWinnerId = this.PLAYER_ID2
-        }
-      console.log(colorWinnerId)
+  
       const find = '/';
       const re = new RegExp(find, 'g');
       const fen = fenAt.replace(re, '-')
@@ -283,28 +280,26 @@ class HumanVsHuman extends Component {
       const ref = db.orderByChild('positionNext').equalTo(fen);
       ref.once("value", function(snapshot) {
         if (snapshot && snapshot.val()){
-          console.log("true");
+          console.log("Situation déja existente");
             snapshot.forEach(function(childSnapshot) {
             const key = childSnapshot.key;
             const childData = childSnapshot.val();
-            
-            console.log(childData)
             if(childData.from === from && childData.to === to && childData.positionNext === fen) {
               alreadyExist = true
               console.log("Le coup a déja été fait")
               snapshot.child(key).ref.update({value: childData.value + 1})
-              dba.push().set({idMove: key, fen: fenBefore, player: colorWinnerId})
+              dba.push().set({idMove: key, fen: fenBefore, player})
             }
   
         });
             
       } 
       if(!alreadyExist) {
-        console.log("Personne n'a jamais fait ce coup");
+        console.log("Personne n'a jamais fait ce coup dans cette situation");
         const refpush = db.push()
         refpush.set({positionNext: fen, value: 0, from, to})
   
-        dba.push().set({idMove: refpush.key, fen: fenBefore, player: colorWinnerId})
+        dba.push().set({idMove: refpush.key, fen: fenBefore, player})
       }
       }, function (errorObject) {
         console.log("The read failed: " + errorObject.code);
@@ -313,6 +308,83 @@ class HumanVsHuman extends Component {
       
     }
 
+  makeMove = (isPlayedAfter) => {
+    console.log('A move will be done')
+    const find = '/';
+    const re = new RegExp(find, 'g');
+    const fen = isPlayedAfter ? this.game.fen().replace(re, '-') : 'start'
+    const db = firebase.database().ref(`/played_move/${fen}`);
+    const ref = db.orderByChild('win').limitToLast(1);
+    let childData;
+    ref.once("value", function(snapshot) {
+      if (snapshot && snapshot.val()){
+        console.log("Situation déja existente");
+          snapshot.forEach(childSnapshot => {
+            childData = childSnapshot.val();
+            console.log(childData)
+            if(!childData.win && childData.lose && !childData.draw) {
+              childData = null
+            } else if(!childData.win && childData.draw && !childData.lose) {
+              childData = null
+            }
+          });
+        }
+    }, function (errorObject) {
+      console.log("The read failed: " + errorObject.code);
+    }).then(() => {
+      if(childData) {
+        console.log("ce coup va m'avancer vers la victoire")
+        const { from } = childData
+        const { to } = childData
+        let move = from ? this.game.move({from, to}) : this.game.move(to) 
+        
+        if (move === null) return;
+
+        const fenBefore = this.state.fen
+        const fen = this.game.fen()
+        this.setState({
+          fenBefore,
+          fen,
+          history: this.game.history({ verbose: true }),
+          pieceSquare: ""
+        });
+
+        // this.setState({fen: childData && childData.positionNext, fenBefore: fen})
+        this.savePosition(fenBefore, fen, from, to, this.PLAYER_ID2)
+      } else {
+        console.log("Not found a good move")
+        this.makeRandomMove()
+      }
+      
+    }) 
+  
+    
+    
+  }
+
+  makeRandomMove = () => {
+    let possibleMoves = this.game.moves();
+
+    // exit if the game is over
+    if (
+      this.game.game_over() === true ||
+      this.game.in_draw() === true ||
+      possibleMoves.length === 0
+    )
+      return;
+
+    let randomIndex = Math.floor(Math.random() * possibleMoves.length);
+
+    this.game.move(possibleMoves[randomIndex]);
+
+    const fen = this.game.fen()
+
+    this.savePosition(this.state.fen, fen, null, possibleMoves[randomIndex], this.PLAYER_ID2)
+
+    this.setState({ fen });
+    
+    // this.savePosition(this.state.fenBefore, fen , null, to)
+  };
 
   render() {
     const { fen, dropSquareStyle, squareStyles } = this.state;
@@ -332,11 +404,12 @@ class HumanVsHuman extends Component {
   }
 }
 
-export default class WithMoveValidation extends Component {
-  render() {
-    return (
+/* eslint react/display-name: 0 */
+/* eslint react/prop-types: 0 */
+export default function RandomVsRandomGame() {
+  return (
     <div>
-      <HumanVsHuman>
+      <RandomVsRandom>
         {({
           position,
           onDrop,
@@ -369,10 +442,9 @@ export default class WithMoveValidation extends Component {
           />
           </div>
         )}
-      </HumanVsHuman>
+      </RandomVsRandom>
     </div>
   );
-  }
 }
 
 const squareStyling = ({ pieceSquare, history }) => {
