@@ -274,7 +274,7 @@ class RandomVsRandom extends Component {
       const re = new RegExp(find, 'g');
       const fen = fenAt.replace(re, '-')
       const fenBefore = fenBeforeAt.replace(re, '-')
-      const db = firebase.database().ref(`/played_move/${fenBefore}`);
+      const db = firebase.database().ref(`/played_move/${fenBefore}/`);
       const dba = firebase.database().ref(`/games/${this.UNIQUE_ID}/played_move/`);
       let alreadyExist = false
       const ref = db.orderByChild('positionNext').equalTo(fen);
@@ -282,25 +282,24 @@ class RandomVsRandom extends Component {
         if (snapshot && snapshot.val()){
           console.log("Situation déja existente");
             snapshot.forEach(function(childSnapshot) {
-            const key = childSnapshot.key;
-            const childData = childSnapshot.val();
-            if(childData.from === from && childData.to === to && childData.positionNext === fen) {
-              alreadyExist = true
-              console.log("Le coup a déja été fait")
-              snapshot.child(key).ref.update({value: childData.value + 1})
-              dba.push().set({idMove: key, fen: fenBefore, player})
-            }
+                const key = childSnapshot.key;
+                const childData = childSnapshot.val();
+                if(((childData.from && childData.from === from) || !childData.from)  && childData.to === to && childData.positionNext === fen) {
+                    alreadyExist = true
+                    console.log("Le coup a déja été fait")
+                    snapshot.child(key).ref.update({value: childData.value + 1})
+                    dba.push().set({idMove: key, fen: fenBefore, player})
+                }
   
-        });
+            });
             
-      } 
-      if(!alreadyExist) {
-        console.log("Personne n'a jamais fait ce coup dans cette situation");
-        const refpush = db.push()
-        refpush.set({positionNext: fen, value: 0, from, to})
-  
-        dba.push().set({idMove: refpush.key, fen: fenBefore, player})
-      }
+        }
+        if(!alreadyExist) {
+            console.log("Personne n'a jamais fait ce coup dans cette situation");
+            const refpush = db.push()
+            refpush.set({positionNext: fen, value: 0, from, to})
+            dba.push().set({idMove: refpush.key, fen: fenBefore, player})
+        } 
       }, function (errorObject) {
         console.log("The read failed: " + errorObject.code);
       });

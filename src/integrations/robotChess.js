@@ -49,7 +49,7 @@ class RandomVsRandom extends Component {
     } else {
       this.WHITE = this.PLAYER_ID
       this.BLACK = this.PLAYER_ID2
-      ref.set({black: this.PLAYER_ID2, white: this.PLAYER_ID2})
+      ref.set({black: this.PLAYER_ID2, white: this.PLAYER_ID})
     }
 
     this.UNIQUE_ID = ref.key
@@ -73,7 +73,7 @@ class RandomVsRandom extends Component {
         this.makeMove(true)
       }
       },
-      50
+      100
     );
 
     setTimeout(
@@ -83,7 +83,7 @@ class RandomVsRandom extends Component {
           () => window.location.reload(), 1000
         )
       },
-      30000
+      40000
     )
     
   }
@@ -309,8 +309,7 @@ class RandomVsRandom extends Component {
             snapshot.forEach(function(childSnapshot) {
             const key = childSnapshot.key;
             const childData = childSnapshot.val();
-            
-            if(childData.from === from && childData.to === to && childData.positionNext === fen) {
+            if(((childData.from && childData.from === from) || !childData.from)  && childData.to === to && childData.positionNext === fen) {
               alreadyExist = true
               console.log("Le coup a déja été fait")
               snapshot.child(key).ref.update({value: childData.value + 1})
