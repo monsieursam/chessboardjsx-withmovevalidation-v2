@@ -26,19 +26,150 @@ class RandomVsRandom extends Component {
     history: []
   };
 
+  constructor(props){
+    super(props)
+    
+    
+    this.PLAYER_ID = 'robot'
+    this.PLAYER_ID2 = 'robot2'
+    this.WHO_BEGIN = Math.floor(Math.random() * 2) + 1
+
+    const db = firebase.database().ref(`/games/`);
+    const ref = db.push()
+
+    if(this.WHO_BEGIN === 1) {
+      this.BLACK = this.PLAYER_ID
+      this.WHITE = this.PLAYER_ID2
+      
+      ref.set({white: this.PLAYER_ID2, black: this.PLAYER_ID})
+    } else {
+      this.WHITE = this.PLAYER_ID
+      this.BLACK = this.PLAYER_ID2
+      ref.set({black: this.PLAYER_ID2, white: this.PLAYER_ID2})
+    }
+
+    this.UNIQUE_ID = ref.key
+
+    
+  }
+
   componentDidMount() {
     this.game = new Chess();
 
-
-
     // this.makeRandomMove()
+    
+    var myInterval = setInterval(
+      () => {
+        let possibleMoves = this.game.moves();
+      if (
+        this.game.game_over() === true ||
+        this.game.in_draw() === true ||
+        possibleMoves.length === 0
+      ) {
+        this.winGame()
+        clearInterval(myInterval);
+      } else {
+        this.makeMove(true)
+      }
+      },
+      50
+    );
+
+    setTimeout(
+      () => {
+        this.drawGame()
+        setTimeout(
+          () => window.location.reload(), 1000
+        )
+      },
+      30000
+    )
+    
+  }
+
+  winGame = () => {
+    if(this.game.in_checkmate()) {
+    console.log("roooooh echec et math bg")
+    
+    let colorWinnerId
+        if(this.game.turn() === 'b') {
+          colorWinnerId = this.WHITE
+        } else {
+          colorWinnerId = this.BLACK
+        }
+
+        const dba = firebase.database().ref(`/games/${this.UNIQUE_ID}/played_move/`);
+
+        dba.once("value", function(snapshot) {
+          if (snapshot && snapshot.val()){
+            console.log("true");
+            snapshot.forEach(childSnapshot => {
+              const key = childSnapshot.key;
+              const childData = childSnapshot.val();
+              const db = firebase.database().ref(`/played_move/${childData.fen}`); 
+              db.once("value", function(snapshot2) {
+                if (snapshot2 && snapshot2.val()){
+                  snapshot2.forEach(childSnapshot2 => {
+                    const childData2 = childSnapshot2.val();
+                    const dbupdate = firebase.database().ref(`/played_move/${childData.fen}/${childData.idMove}/`);
+                    if(childData.player === colorWinnerId) {
+                      dbupdate.update({win: childData2.win ? childData2.win + 1 : 1 })
+                    } else {
+                      dbupdate.update({lose: childData2.lose ? childData2.lose + 1 : 1 })
+                    }
+                })
+              }
+              }, function (errorObject) {
+                  console.log("The read failed: " + errorObject.code);
+              });
+            
+          });
+        }
+        setTimeout(
+          () => window.location.reload(), 1000
+        )
+        }, function (errorObject) {
+          console.log("The read failed: " + errorObject.code);
+        });
+      }
+  }
+
+  drawGame = () => {
+    const dba = firebase.database().ref(`/games/${this.UNIQUE_ID}/played_move/`);
+
+        dba.once("value", function(snapshot) {
+          if (snapshot && snapshot.val()){
+            console.log("true");
+            snapshot.forEach(childSnapshot => {
+              const key = childSnapshot.key;
+              const childData = childSnapshot.val();
+              const db = firebase.database().ref(`/played_move/${childData.fen}`); 
+              db.once("value", function(snapshot2) {
+                if (snapshot2 && snapshot2.val()){
+                  snapshot2.forEach(childSnapshot2 => {
+                    const childData2 = childSnapshot2.val();
+                    const dbupdate = firebase.database().ref(`/played_move/${childData.fen}/${childData.idMove}/`);
+                    dbupdate.update({draw: childData2.draw ? childData2.draw + 1 : 1 })
+                    
+                })
+              }
+              }, function (errorObject) {
+                  console.log("The read failed: " + errorObject.code);
+              });
+            
+          });
+        }
+        }, function (errorObject) {
+          console.log("The read failed: " + errorObject.code);
+        })
+        
+      
   }
 
   componentDidUpdate(prevProps) {
     if (this.state.diff !== this.state.fenBefore) {
       // this.makeMove()
       this.setState({ diff: this.state.fenBefore})
-      // this.makeMove()
     }
   }
 
@@ -144,6 +275,7 @@ class RandomVsRandom extends Component {
 
     const fenBefore = this.state.fen
     const fen = this.game.fen()
+
     this.setState({
       fenBefore,
       fen,
@@ -151,7 +283,9 @@ class RandomVsRandom extends Component {
       pieceSquare: ""
     });
 
-    this.savePosition(fenBefore, fen, from, to)
+    this.savePosition(fenBefore, fen, from, to, this.PLAYER_ID)
+
+    this.makeMove()
   };
 
   onSquareRightClick = square =>
@@ -159,47 +293,59 @@ class RandomVsRandom extends Component {
       squareStyles: { [square]: { backgroundColor: "deepPink" } }
     });
 
-  savePosition = (fenBeforeAt, fenAt, from, to) => {
-    console.log('I save position')
-
-    const find = '/';
-    const re = new RegExp(find, 'g');
-    const fen = fenAt.replace(re, '-')
-    const fenBefore = fenBeforeAt.replace(re, '-')
-    const db = firebase.database().ref(`/played_move/${fenBefore}`);
-    const ref = db.orderByChild('positionNext').equalTo(fen);
-    ref.once("value", function(snapshot) {
-      if (snapshot && snapshot.val()){
-        console.log("true");
-          snapshot.forEach(function(childSnapshot) {
-          const key = childSnapshot.key;
-          const childData = childSnapshot.val();
-          
-          if(childData.from === from && childData.to === to) {
-            snapshot.child(key).ref.update({value: childData.value + 1})
-          } else {
-            console.log("false");
-            db.push().set({positionNext: fen, value: 0, from, to})
-          }
+    savePosition = (fenBeforeAt, fenAt, from, to, player) => {
+      console.log('I save position')
+  
+      const find = '/';
+      const re = new RegExp(find, 'g');
+      const fen = fenAt.replace(re, '-')
+      const fenBefore = fenBeforeAt.replace(re, '-')
+      const db = firebase.database().ref(`/played_move/${fenBefore}`);
+      const dba = firebase.database().ref(`/games/${this.UNIQUE_ID}/played_move/`);
+      let alreadyExist = false
+      const ref = db.orderByChild('positionNext').equalTo(fen);
+      ref.once("value", function(snapshot) {
+        if (snapshot && snapshot.val()){
+          console.log("true");
+            snapshot.forEach(function(childSnapshot) {
+            const key = childSnapshot.key;
+            const childData = childSnapshot.val();
+            
+            console.log(childData)
+            if(childData.from === from && childData.to === to && childData.positionNext === fen) {
+              alreadyExist = true
+              console.log("Le coup a déja été fait")
+              snapshot.child(key).ref.update({value: childData.value + 1})
+              dba.push().set({idMove: key, fen: fenBefore, player})
+            }
+  
+        });
+            
+      } 
+      if(!alreadyExist) {
+        console.log("Personne n'a jamais fait ce coup");
+        const refpush = db.push()
+        refpush.set({positionNext: fen, value: 0, from, to})
+  
+        dba.push().set({idMove: refpush.key, fen: fenBefore, player})
+      }
+      }, function (errorObject) {
+        console.log("The read failed: " + errorObject.code);
       });
-          
-    } else {
-      db.push().set({positionNext: fen, value: 0, from, to})
+  
+      
     }
-    }, function (errorObject) {
-      console.log("The read failed: " + errorObject.code);
-    });
 
-    this.makeMove()
-  }
+  makeMove = (isPlayedAfter) => {
+    
 
-  makeMove = () => {
-    console.log('A move was done')
+      
+    console.log('A move will be done')
     const find = '/';
     const re = new RegExp(find, 'g');
-    const fen = this.game.fen().replace(re, '-')
+    const fen = isPlayedAfter ? this.game.fen().replace(re, '-') : 'start'
     const db = firebase.database().ref(`/played_move/${fen}`);
-    const ref = db.orderByChild('value').limitToLast(1);
+    const ref = db.orderByChild('win').limitToFirst(1);
     let childData;
     ref.once("value", function(snapshot) {
       if (snapshot && snapshot.val()){
@@ -211,6 +357,11 @@ class RandomVsRandom extends Component {
 
           // childData will be the actual contents of the child
           childData = childSnapshot.val();
+          if(!childData.win && childData.lose && !childData.draw) {
+            childData = null
+          } else if(!childData.win && childData.draw && !childData.lose) {
+            childData = null
+          }
       });
         }
     }, function (errorObject) {
@@ -218,33 +369,37 @@ class RandomVsRandom extends Component {
     }).then(() => {
       if(childData) {
         console.log(childData)
-        const {from} = childData
-        const {to} = childData
+        const { from } = childData
+        const { to } = childData
 
         console.log(from)
         console.log(to)
-        let move = this.game.move({from, to});
+        let move = from ? this.game.move({from, to}) : this.game.move(to) 
         
         if (move === null) return;
 
         console.log('plop')
-        const fen = this.state.fen
+        const fenBefore = this.state.fen
+        const fen = this.game.fen()
         this.setState({
-          fenBefore: fen,
-          fen: this.game.fen(),
+          fenBefore,
+          fen,
           history: this.game.history({ verbose: true }),
           pieceSquare: ""
         });
 
         // this.setState({fen: childData && childData.positionNext, fenBefore: fen})
-        
+        this.savePosition(fenBefore, fen, from, to, this.PLAYER_ID)
       } else {
         console.log("Not found a good move")
         this.makeRandomMove()
       }
       
-    })    
-  };
+    }) 
+  
+    
+    
+  }
 
   makeRandomMove = () => {
     let possibleMoves = this.game.moves();
@@ -259,10 +414,16 @@ class RandomVsRandom extends Component {
 
     let randomIndex = Math.floor(Math.random() * possibleMoves.length);
 
-    console.log(possibleMoves[randomIndex])
+    console.log(possibleMoves)
     this.game.move(possibleMoves[randomIndex]);
-    this.setState({ fen: this.game.fen() });
 
+    const fen = this.game.fen()
+
+    this.savePosition(this.state.fen, fen, null, possibleMoves[randomIndex], this.PLAYER_ID)
+
+    this.setState({ fen });
+    
+    // this.savePosition(this.state.fenBefore, fen , null, to)
   };
 
   render() {
